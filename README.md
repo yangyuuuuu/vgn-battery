@@ -86,6 +86,11 @@ Report 只有 Report ID 0x04 这一条可写报文
 | `tray_common.py` | 配置 / 开机自启 / 桌面链接 / 进程间消息 |
 | `win_icon.py` `win_link.py` `win_shell.py` | 点阵数字→ICO、软链接降级、已知文件夹与 .lnk |
 
+## 文档
+
+* **[PROMPT.md](PROMPT.md)** —— 把整套流程压成一段可复用的提示词：换个设备、换个 Agent，直接改「要读的设备」那一节就能重做一遍
+* **[docs/PITFALLS.md](docs/PITFALLS.md)** —— 踩坑合集，每条都是「症状 → 成因 → 正确做法 + 最小代码片段」，末尾有一页速查表
+
 ## 实测验收
 
 | 项目 | 结果 |
