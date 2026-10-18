@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+# 运行时产生（不是日志，是你自己的设置/单实例 pid）
+tray_config.json
+tray_pid.txt
+protocols_user.json
+
+# 构建产物
+.venv-build/
+build/
+dist/
+*.spec

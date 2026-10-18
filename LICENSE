@@ -1,0 +1,30 @@
+MIT License
+
+Copyright (c) 2026 yangyuuuuu (https://github.com/yangyuuuuu)
+
+本许可证适用于本仓库中由本仓库作者编写的部分：vgn_proto.py、my_devices.py、
+tray_app.py、launcher.py、make_icon.py 以及 README/NOTICE 等文档。
+
+仓库中的 Windows 底层件（hid_win.py、win_icon.py、win_link.py、win_shell.py、
+tray_common.py、battery.py、app.py、bt_battery.py、darkrim_proto.py）沿用自
+https://github.com/yszyszysz233/2.4G-battery-viewer —— 该上游仓库未声明许可证，
+其权利归原作者所有。本仓库只是把它按 VGN 键盘重做了设备层并公开发布，供学习与
+个人使用；如原作者有任何异议，请联系删除。
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
