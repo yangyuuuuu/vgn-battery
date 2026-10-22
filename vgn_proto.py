@@ -59,6 +59,7 @@ class VgnReading:
 
     percent: Optional[int] = None
     charging: bool = False
+    status: int = 0          # 回包第 9 字节原值（0=未充电，非 0=充电中）
     raw: bytes = b""
     detail: str = ""          # 数据来源/说明（成功时显示）
     error: str = ""           # 失败原因（失败时显示）
@@ -115,9 +116,10 @@ def read_battery(timeout: float = 1.2) -> VgnReading:
                     pct = r[IDX_PERCENT]
                     if not 0 <= pct <= 100:
                         continue
-                    charging = len(r) > IDX_CHARGING and r[IDX_CHARGING] != 0
-                    return VgnReading(percent=pct, charging=charging,
-                                      raw=bytes(r), detail=SOURCE, device=name)
+                    status = r[IDX_CHARGING] if len(r) > IDX_CHARGING else 0
+                    return VgnReading(percent=pct, charging=bool(status),
+                                      status=status, raw=bytes(r),
+                                      detail=SOURCE, device=name)
                 time.sleep(0.05)                  # 给键盘一点唤醒时间，再来一次
             if last_seen:
                 return VgnReading(

@@ -36,6 +36,7 @@ import traceback
 from ctypes import wintypes
 from typing import Optional
 
+import battery_history as bh
 import hid_win as hw        # 只用到里面的 GUID 结构（托盘通知用）
 import vgn_proto as vp
 import win_icon
@@ -162,15 +163,24 @@ TRAY_ICONS = [
 # --------------------------------------------------------------------------
 # 设备读取（轻量版）
 # --------------------------------------------------------------------------
-def read_keyboard() -> tuple[Optional[int], str, bool]:
-    """读一次键盘电量，返回 (百分比, 失败原因, 是否充电中)。"""
+def read_keyboard() -> tuple[Optional[int], str, bool, bool, str]:
+    """读一次键盘电量。
+
+    返回 (百分比, 失败原因, 是否充电中, 数值是否存疑, 存疑说明)。
+    存疑 = 接收器只回一个百分数、没有采样时间，恒为 100 且很久没变时不能当真。
+    """
     try:
         r = vp.read_battery()
     except Exception as e:                       # 兜底：托盘永远不该崩
-        return None, f"读取失败：{e}", False
-    if r.ok:
-        return r.percent, "", r.charging
-    return None, r.error or "没读到电量", False
+        return None, f"读取失败：{e}", False, False, ""
+    if not r.ok:
+        return None, r.error or "没读到电量", False, False, ""
+    try:
+        fresh = bh.record(int(r.percent), int(r.status))
+    except Exception:
+        fresh = {}
+    return (r.percent, "", r.charging,
+            bool(fresh.get("suspect")), fresh.get("note") or "")
 
 
 # --------------------------------------------------------------------------
@@ -183,7 +193,8 @@ class TrayApp:
         self.hwnd: Optional[int] = None
         self.wndproc_ref = None
         self.busy = False
-        self.levels = {k: (None, "正在读取…", False) for _, k, _, _ in TRAY_ICONS}
+        self.levels = {k: (None, "正在读取…", False, False, "")
+                       for _, k, _, _ in TRAY_ICONS}
         self.icons_added = False
         self.taskbar_created_msg = USER32.RegisterWindowMessageW("TaskbarCreated")
         self.msg_quit = USER32.RegisterWindowMessageW(tc.MSG_QUIT)
@@ -222,13 +233,17 @@ class TrayApp:
 
     def _apply_icon(self, action: int, uID: int, key: str, title: str,
                     plate: bool) -> bool:
-        level, err, charging = self.levels[key]
+        level, err, charging, suspect, note = self.levels[key]
         text = str(level) if level is not None else "--"
         nid = self._nid(uID)
-        nid.hIcon = win_icon.make_hicon(text, self._color(level), plate)
+        # 存疑时图标转成琥珀色，提醒"这个数字别太当真"
+        color = (245, 196, 81) if (suspect and level is not None) else self._color(level)
+        nid.hIcon = win_icon.make_hicon(text, color, plate)
         if level is not None:
             mark = "（充电中）" if charging else ""
             stamp = time.strftime("%H:%M:%S")
+            if suspect:
+                mark += " · 该值很久没变化，可能不准"
             nid.szTip = f"{title}：{level}%{mark}（{stamp} 更新）"
         else:
             nid.szTip = f"{title}：{err or '未知'}"
@@ -296,8 +311,10 @@ class TrayApp:
 
     def on_refresh_done(self) -> None:
         self.busy = False
-        lv, err, charging = self.levels["kbd"]
-        self.log(f"刷新完成：键盘={lv}%（{err or 'ok'}）" + (" 充电中" if charging else ""))
+        lv, err, charging, suspect, note = self.levels["kbd"]
+        self.log(f"刷新完成：键盘={lv}%（{err or 'ok'}）"
+                 + (" 充电中" if charging else "")
+                 + (" [存疑]" if suspect else ""))
         self.update_icons()
 
     # ---- 打开简洁界面 ---------------------------------------------------

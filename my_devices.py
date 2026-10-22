@@ -21,6 +21,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Optional
 
+import battery_history as bh
 import tray_common as tc
 import vgn_proto as vp
 import win_link
@@ -39,6 +40,9 @@ class Reading:
     detail: str = ""
     error: str = ""
     raw: str = ""
+    since: str = ""      # 这个数值上次变化的时间
+    suspect: bool = False   # 恒为 100% 且未充电、且很久没变 → 数值可能不值得信
+    note: str = ""
 
     @property
     def ok(self) -> bool:
@@ -46,15 +50,26 @@ class Reading:
 
 
 def read_vgn() -> Reading:
-    """读一次键盘电量，任何异常都收敛成带原因的 Reading。"""
+    """读一次键盘电量，任何异常都收敛成带原因的 Reading。
+
+    读数会顺手记进 battery_history：接收器只回一个百分比、没有采样时间，
+    所以要靠历史回答「这个数字上次变化是什么时候」，才能判断它是不是固件固定值。
+    """
     try:
         r = vp.read_battery()
     except Exception as e:                       # 兜底：界面永远不该崩
         return Reading(error=f"读取出错：{e}")
     if not r.ok:
         return Reading(device=r.device, error=r.error)
+    try:
+        fresh = bh.record(int(r.percent), int(r.status))
+    except Exception:
+        fresh = {"suspect": False, "note": "", "since": ""}
     return Reading(level=r.percent, charging=r.charging, device=r.device,
-                   detail=r.detail, raw=r.raw.hex(" ") if r.raw else "")
+                   detail=r.detail, raw=r.raw.hex(" ") if r.raw else "",
+                   since=fresh.get("since") or "",
+                   suspect=bool(fresh.get("suspect")),
+                   note=fresh.get("note") or "")
 
 
 # ==========================================================================
@@ -67,12 +82,59 @@ def cli_once() -> None:
         print(f"{TITLE}: {r.level}%{charge}   {r.detail}")
         if r.device:
             print(f"    设备: {r.device}")
+        if r.since:
+            print(f"    上次变化: {r.since}")
         if r.raw:
             print(f"    报文: {r.raw}")
+        if r.suspect and r.note:
+            print(f"    注意: {r.note}")
     else:
         print(f"{TITLE}: 读取失败 —— {r.error}")
         if r.device:
             print(f"    设备: {r.device}")
+
+
+def cli_diag() -> None:
+    """诊断模式：把「读到什么」和「这个值有没有变过」一次说清楚。"""
+    print(f"=== {TITLE} 诊断 ===")
+    iface = vp.find_interface()
+    if iface is None:
+        print("接收器: 没找到 320F:5088 的 0xFF1C 通道")
+        return
+    print(f"接收器: {iface.path.split('#')[1]}")
+    print(f"通道: usage {iface.usage_page:#06x}:{iface.usage:#06x}  "
+          f"in={iface.input_len} out={iface.output_len} feature={iface.feature_len}")
+    print(f"请求帧: {vp.FRAME[:12].hex(' ')} ...")
+
+    pcts, raws = [], []
+    for i in range(5):
+        r = vp.read_battery()
+        pcts.append(r.percent)
+        if r.raw:
+            raws.append(r.raw[:12].hex(" "))
+        time.sleep(0.25)
+    print(f"连续 5 次: {pcts}")
+    if raws:
+        print(f"回包: {raws[0]} ...")
+
+    st = vp.read_battery()
+    if not st.ok:
+        print(f"读取失败: {st.error}")
+    hist = bh.summary()
+    print()
+    print("=== 历史 ===")
+    print(f"文件: {hist['path']}")
+    print(f"样本: {hist['samples']} 条，起始 {hist['first_at'] or '-'}")
+    print(f"见过这些值: {hist['distinct_levels'] or '-'}"
+          f"（{'变化过' if hist['ever_changed'] else '从未变化'}）")
+    print(f"上次变化: {hist['last_change_at'] or '-'}")
+    if st.ok:
+        fresh = bh.record(int(st.percent), int(st.status))
+        print(f"当前值稳定: {fresh['stable_hours']:.1f} 小时")
+        if fresh["suspect"]:
+            print(f"结论: 数值存疑 —— {fresh['note']}")
+        else:
+            print("结论: 数值看着正常（在变化，或时间还短）")
 
 
 # ==========================================================================
@@ -143,9 +205,17 @@ class DeviceCard:
         if r.ok:
             self.lab_level.configure(text=f"{r.level}%", foreground=level_color(r.level))
             status = ("充电中 · " if r.charging else "") + level_text(r.level)
+            if r.suspect:
+                status += " · 数值存疑"
             self.lab_status.configure(text=status)
             self.bar["value"] = r.level or 0
-            self.lab_detail.configure(text=r.detail)
+            if r.suspect and r.note:
+                tip = f"⚠ {r.note}"
+                if r.since:
+                    tip += f"（上次变化：{r.since}）"
+                self.lab_detail.configure(text=tip, foreground="#f5c451")
+            else:
+                self.lab_detail.configure(text=r.detail, foreground=MUTED)
             short = " ".join(r.raw.split()[:12]) if r.raw else ""
             if short:
                 short += " …（共 64 字节）"
@@ -154,7 +224,7 @@ class DeviceCard:
             self.lab_level.configure(text="--", foreground=MUTED)
             self.lab_status.configure(text="")
             self.bar["value"] = 0
-            self.lab_detail.configure(text=r.error)
+            self.lab_detail.configure(text=r.error, foreground=MUTED)
             self.lab_extra.configure(text="")
 
 
@@ -465,7 +535,13 @@ def main() -> None:
                         help="在桌面重建软连接（项目文件夹 + 启动脚本）")
     parser.add_argument("--autostart", choices=["on", "off", "status"],
                         help="开机自启：on 打开 / off 关闭 / status 查看")
+    parser.add_argument("--diag", action="store_true",
+                        help="诊断：原始报文 + 历史样本 + 数值是否在变（排查「一直 100%」用）")
     args = parser.parse_args()
+
+    if args.diag:
+        cli_diag()
+        return
 
     if args.install_links:
         r = tc.install_desktop_links()

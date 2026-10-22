@@ -5,6 +5,7 @@ __pycache__/
 tray_config.json
 tray_pid.txt
 protocols_user.json
+battery_history.json
 
 # 构建产物
 .venv-build/

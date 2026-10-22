@@ -37,7 +37,7 @@ def _attach_console() -> None:
 
 def main() -> int:
     argv = sys.argv[1:]
-    if any(a in ("--once", "--status", "--quit") for a in argv):
+    if any(a in ("--once", "--status", "--quit", "--diag") for a in argv):
         _attach_console()
 
     if any(a in TRAY_FLAGS for a in argv):
